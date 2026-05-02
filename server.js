@@ -1,0 +1,136 @@
+const path = require('path');
+const express = require('express');
+const mysql = require('mysql2');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname)));
+
+// MySQL connection
+const db = mysql.createConnection({
+  host: 'localhost',
+  user: 'root', // change as needed
+  password: 'root', // change as needed
+  database: 'aws'
+});
+
+db.connect((err) => {
+  if (err) {
+    console.error('DB connection failed:', err);
+  } else {
+    console.log('Connected to MySQL');
+  }
+});
+
+// Create tables if not exist
+db.query(`
+  CREATE TABLE IF NOT EXISTS exams (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    timeLimitMinutes INT DEFAULT 30,
+    passPercent INT DEFAULT 70,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`, (err) => {
+  if (err) console.error('Create exams table error:', err);
+});
+
+db.query(`
+  CREATE TABLE IF NOT EXISTS questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    exam_id INT,
+    text TEXT NOT NULL,
+    answers JSON,
+    correct JSON,
+    isMulti BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE
+  )
+`, (err) => {
+  if (err) console.error('Create questions table error:', err);
+});
+
+function parseJSONOrArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [value];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed;
+    return [parsed];
+  } catch {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      return JSON.parse(trimmed.replace(/,\s*$/, ']'));
+    }
+    if (trimmed.includes(',')) {
+      return trimmed.split(',').map(item => item.trim()).filter(Boolean);
+    }
+    return [trimmed];
+  }
+}
+
+// API endpoints
+app.post('/save-exam', (req, res) => {
+  const { name, desc, timeLimitMinutes, passPercent, questions } = req.body;
+  const sql = 'INSERT INTO exams (name, description, timeLimitMinutes, passPercent) VALUES (?, ?, ?, ?)';
+  db.query(sql, [name, desc, timeLimitMinutes, passPercent], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const examId = result.insertId;
+    const qSql = 'INSERT INTO questions (exam_id, text, answers, correct, isMulti) VALUES ?';
+    const qValues = questions.map(q => [examId, q.text, JSON.stringify(q.answers), JSON.stringify(q.correct), q.isMulti]);
+    db.query(qSql, [qValues], (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ examId });
+    });
+  });
+});
+
+app.get('/exams', (req, res) => {
+  const sql = 'SELECT id, name, description, timeLimitMinutes, passPercent, createdAt FROM exams ORDER BY createdAt DESC';
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
+});
+
+app.get('/exam/:id', (req, res) => {
+  const examId = req.params.id;
+  const examSql = 'SELECT * FROM exams WHERE id = ?';
+  db.query(examSql, [examId], (err, examResults) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (examResults.length === 0) return res.status(404).json({ error: 'Exam not found' });
+    const exam = examResults[0];
+    const qSql = 'SELECT text, answers, correct, isMulti FROM questions WHERE exam_id = ? ORDER BY id';
+    db.query(qSql, [examId], (err, qResults) => {
+      if (err) return res.status(500).json({ error: err.message });
+      exam.questions = qResults.map(q => ({
+        text: q.text,
+        answers: parseJSONOrArray(q.answers),
+        correct: parseJSONOrArray(q.correct)
+          .map(ch => {
+            if (typeof ch === 'number' && Number.isInteger(ch)) return ch;
+            if (typeof ch === 'string') {
+              const trimmed = ch.trim();
+              if (/^[0-9]+$/.test(trimmed)) return parseInt(trimmed, 10);
+              const letterMatch = trimmed.toUpperCase().match(/^([A-E])$/);
+              if (letterMatch) return letterMatch[1].charCodeAt(0) - 65;
+            }
+            return null;
+          })
+          .filter(idx => Number.isInteger(idx) && idx >= 0),
+        isMulti: q.isMulti
+      }));
+      res.json(exam);
+    });
+  });
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.listen(3000, () => {
+  console.log('Server running on port 3000');
+});

@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExamCraft — Hệ thống thi trắc nghiệm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ===== RESET & TOKENS ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:        #0f0e0c;
+    --ink-muted:  #6b6860;
+    --ink-faint:  #b8b5b0;
+    --paper:      #faf9f6;
+    --surface:    #f0ede8;
+    --border:     #e2ddd8;
+    --accent:     #c8873a;
+    --accent-dk:  #a06728;
+    --accent-lt:  #fef3e6;
+    --green:      #3a7d57;
+    --green-lt:   #eaf4ee;
+    --red:        #b94040;
+    --red-lt:     #faeaea;
+    --blue:       #3a5f8a;
+    --blue-lt:    #e8f0f8;
+    --r:          10px;
+    --r-lg:       16px;
+    --shadow:     0 1px 3px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.05);
+    --shadow-lg:  0 8px 32px rgba(0,0,0,.10);
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* ===== LAYOUT ===== */
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ===== TOPBAR ===== */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(250,249,246,.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex; align-items: center; gap: 2rem;
+    height: 58px;
+  }
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.3rem;
+    color: var(--ink);
+    text-decoration: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  .nav-tabs { display: flex; gap: 4px; margin-left: auto; }
+  .nav-tab {
+    padding: 6px 16px; border-radius: 99px; font-size: 13px; font-weight: 500;
+    border: none; background: none; cursor: pointer; color: var(--ink-muted);
+    transition: all .18s;
+  }
+  .nav-tab:hover { background: var(--surface); color: var(--ink); }
+  .nav-tab.active { background: var(--ink); color: var(--paper); }
+
+  /* ===== SCREENS ===== */
+  .screen { display: none; flex: 1; padding: 2.5rem 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
+  .screen.active { display: block; animation: fadeIn .25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ===== TYPOGRAPHY ===== */
+  .page-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2rem; font-weight: 400; margin-bottom: .4rem;
+  }
+  .page-sub { color: var(--ink-muted); font-size: .9rem; margin-bottom: 2rem; }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .card + .card { margin-top: 1rem; }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 20px; border-radius: var(--r); font-size: 13.5px; font-weight: 500;
+    border: 1.5px solid transparent; cursor: pointer; transition: all .18s;
+    font-family: 'DM Sans', sans-serif; white-space: nowrap;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent-dk); border-color: var(--accent-dk); }
+  .btn-secondary { background: #fff; color: var(--ink); border-color: var(--border); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-danger { background: var(--red-lt); color: var(--red); border-color: #f0c0c0; }
+  .btn-danger:hover { background: #f5d0d0; }
+  .btn-dark { background: var(--ink); color: var(--paper); }
+  .btn-dark:hover { background: #2a2925; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+  .btn-lg { padding: 12px 28px; font-size: 15px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+  /* ===== FORM ELEMENTS ===== */
+  label.field-label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  input[type=text], textarea, select {
+    width: 100%; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: var(--r);
+    font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--ink);
+    background: #fff; transition: border-color .15s, box-shadow .15s; outline: none;
+  }
+  input[type=text]:focus, textarea:focus, select:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(200,135,58,.12);
+  }
+  textarea { resize: vertical; min-height: 72px; }
+
+  /* ===== QUESTION EDITOR ===== */
+  .question-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .question-card.dragging { opacity: .5; }
+  .q-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 1rem;
+  }
+  .q-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent-lt); color: var(--accent);
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .q-num-title { font-weight: 600; font-size: .88rem; flex: 1; }
+  .q-delete { margin-left: auto; }
+  .answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 1rem; }
+  .answer-row { display: flex; align-items: center; gap: 8px; }
+  .answer-label {
+    width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 11px;
+    font-weight: 700; flex-shrink: 0; transition: all .15s; cursor: pointer;
+    color: var(--ink-muted);
+  }
+  .answer-label.correct {
+    background: var(--green); border-color: var(--green); color: #fff;
+  }
+  .answer-checkbox { display: none; }
+  .correct-toggle {
+    display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-muted); margin-top: 4px;
+  }
+  .correct-toggle input { width: auto; }
+
+  /* ===== IMPORT/EXPORT ===== */
+  .json-area { font-family: 'Courier New', monospace; font-size: 12px; min-height: 160px; background: #1a1917; color: #e8e4dc; border: none; border-radius: var(--r); padding: 1rem; }
+  .json-area:focus { box-shadow: 0 0 0 3px rgba(200,135,58,.2); border: none; outline: none; }
+
+  /* ===== EXAM SCREEN ===== */
+  .exam-topbar {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--r-lg);
+    padding: 1rem 1.5rem; margin-bottom: 1.5rem;
+    display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+    box-shadow: var(--shadow);
+  }
+  .exam-info { flex: 1; }
+  .exam-title-text { font-family: 'DM Serif Display', serif; font-size: 1.2rem; }
+  .exam-meta-row { display: flex; gap: 1rem; margin-top: 4px; flex-wrap: wrap; }
+  .meta-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px; color: var(--ink-muted); background: var(--surface);
+    padding: 3px 10px; border-radius: 99px;
+  }
+  .timer-display {
+    font-size: 1.6rem; font-family: 'DM Serif Display', serif;
+    color: var(--ink); min-width: 72px; text-align: center;
+  }
+  .timer-display.warning { color: var(--red); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+  .progress-wrap { margin-bottom: 1.5rem; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-muted); margin-bottom: 6px; }
+  .progress-bar { height: 5px; background: var(--surface); border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
+
+  .q-nav-dots { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .q-dot {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1.5px solid var(--border); background: #fff;
+    font-size: 11px; font-weight: 600; color: var(--ink-muted);
+    cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center;
+  }
+  .q-dot:hover { border-color: var(--accent); color: var(--accent); }
+  .q-dot.current { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .q-dot.answered { background: var(--blue-lt); border-color: var(--blue); color: var(--blue); }
+  .q-dot.current.answered { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .question-display { background: #fff; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.75rem; box-shadow: var(--shadow); margin-bottom: 1rem; }
+  .q-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--ink-muted); background: var(--surface); padding: 3px 10px; border-radius: 99px; margin-bottom: .75rem; }
+  .q-text { font-size: 1rem; line-height: 1.65; font-weight: 500; margin-bottom: 1.25rem; }
+  .q-multi-hint { font-size: 12px; color: var(--accent); margin-bottom: .75rem; font-style: italic; }
+
+  .option-list { display: flex; flex-direction: column; gap: 8px; }
+  .option-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 15px; border-radius: var(--r); border: 1.5px solid var(--border);
+    cursor: pointer; transition: all .15s; background: #fff; text-align: left; width: 100%;
+  }
+  .option-item:hover:not(.disabled) { border-color: var(--accent); background: var(--accent-lt); }
+  .option-item.selected { border-color: var(--blue); background: var(--blue-lt); }
+  .option-item.correct { border-color: var(--green); background: var(--green-lt); }
+  .option-item.wrong { border-color: var(--red); background: var(--red-lt); }
+  .option-item.correct-unselected { border-color: var(--green); background: var(--green-lt); opacity: .7; }
+  .option-item.disabled { cursor: default; }
+  .opt-letter {
+    width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid currentColor;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0; transition: all .15s;
+    color: var(--ink-faint);
+  }
+  .option-item.selected .opt-letter { color: var(--blue); border-color: var(--blue); }
+  .option-item.correct .opt-letter { color: var(--green); border-color: var(--green); }
+  .option-item.wrong .opt-letter { color: var(--red); border-color: var(--red); }
+  .opt-text { font-size: .93rem; line-height: 1.5; padding-top: 2px; }
+  .opt-icon { margin-left: auto; font-size: 14px; }
+
+  .exam-actions { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+  /* ===== RESULT SCREEN ===== */
+  .result-hero {
+    text-align: center; padding: 2.5rem 1rem 2rem;
+    background: #fff; border: 1px solid var(--border); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg); margin-bottom: 1.5rem;
+  }
+  .score-ring-wrap { display: flex; justify-content: center; margin-bottom: 1.25rem; }
+  .score-ring {
+    width: 130px; height: 130px; border-radius: 50%;
+    border: 5px solid var(--green); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; position: relative;
+  }
+  .score-ring.fail { border-color: var(--red); }
+  .score-pct { font-family: 'DM Serif Display', serif; font-size: 2.2rem; line-height: 1; }
+  .score-sub { font-size: 11px; color: var(--ink-muted); }
+  .pass-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 16px; border-radius: 99px; font-size: 13px; font-weight: 600; margin-bottom: 1rem;
+  }
+  .pass-badge.pass { background: var(--green-lt); color: var(--green); }
+  .pass-badge.fail { background: var(--red-lt); color: var(--red); }
+  .stats-row { display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap; }
+  .stat-item { text-align: center; }
+  .stat-val { font-family: 'DM Serif Display', serif; font-size: 1.6rem; color: var(--ink); }
+  .stat-lbl { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  .review-list { display: flex; flex-direction: column; gap: 1rem; }
+  .review-card { background: #fff; border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow); }
+  .review-card-header { padding: .75rem 1.25rem; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+  .review-icon { font-size: 16px; }
+  .review-q-text { font-size: .88rem; font-weight: 500; flex: 1; }
+  .review-card-body { padding: 1rem 1.25rem; }
+  .review-option { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; font-size: .88rem; margin-bottom: 4px; }
+  .review-option.correct { background: var(--green-lt); color: var(--green); }
+  .review-option.wrong { background: var(--red-lt); color: var(--red); }
+  .review-option.missed { background: var(--green-lt); color: var(--green); opacity: .7; }
+
+  /* ===== HISTORY SCREEN ===== */
+  .history-item {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--r-lg);
+    padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem;
+    box-shadow: var(--shadow); margin-bottom: .75rem; transition: box-shadow .15s;
+  }
+  .history-item:hover { box-shadow: var(--shadow-lg); }
+  .history-score-badge {
+    width: 48px; height: 48px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0;
+  }
+  .history-score-badge.pass { background: var(--green-lt); color: var(--green); border: 2px solid var(--green); }
+  .history-score-badge.fail { background: var(--red-lt); color: var(--red); border: 2px solid var(--red); }
+  .history-info { flex: 1; }
+  .history-name { font-weight: 600; font-size: .93rem; }
+  .history-meta { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+  .empty-state { text-align: center; padding: 4rem 1rem; color: var(--ink-muted); }
+  .empty-icon { font-size: 3rem; margin-bottom: 1rem; opacity: .4; }
+
+  /* ===== HOME SCREEN ===== */
+  .home-hero {
+    text-align: center; padding: 3rem 1rem 2rem;
+  }
+  .home-title { font-family: 'DM Serif Display', serif; font-size: 2.8rem; line-height: 1.15; margin-bottom: .75rem; }
+  .home-sub { font-size: 1rem; color: var(--ink-muted); max-width: 480px; margin: 0 auto 2rem; }
+  .home-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .home-card {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--r-lg);
+    padding: 1.5rem; text-align: left; cursor: pointer; transition: all .2s;
+    box-shadow: var(--shadow);
+  }
+  .home-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--accent); }
+  .home-card-icon { font-size: 1.8rem; margin-bottom: .75rem; }
+  .home-card-title { font-weight: 600; font-size: 1rem; margin-bottom: .3rem; }
+  .home-card-desc { font-size: .85rem; color: var(--ink-muted); }
+
+  /* ===== TOAST ===== */
+  .toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem;
+    background: var(--ink); color: var(--paper);
+    padding: 10px 18px; border-radius: var(--r); font-size: 13.5px; font-weight: 500;
+    box-shadow: var(--shadow-lg); z-index: 999;
+    animation: toastIn .25s ease; pointer-events: none;
+  }
+  .toast.success { background: var(--green); }
+  .toast.error { background: var(--red); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  /* ===== MODAL ===== */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15,14,12,.4);
+    display: flex; align-items: center; justify-content: center; z-index: 200;
+    backdrop-filter: blur(4px);
+  }
+  .modal-box {
+    background: #fff; border-radius: var(--r-lg); padding: 2rem;
+    max-width: 440px; width: 90%; box-shadow: var(--shadow-lg);
+    animation: fadeIn .2s ease;
+  }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 1.25rem; margin-bottom: .5rem; }
+  .modal-body { color: var(--ink-muted); font-size: .9rem; margin-bottom: 1.5rem; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .file-import-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+  .file-import-row label { cursor: pointer; }
+  .file-parse-preview { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .parse-status { color: var(--ink); font-size: 13px; margin-bottom: 10px; }
+  .parse-preview-list { display: grid; gap: 8px; max-height: 220px; overflow:auto; padding-right: 4px; }
+  .parse-q-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--border); background: #fff; font-size: 13px; }
+  .parse-q-row.ok { background: #f4f9f4; border-color: #cde5cf; }
+  .parse-q-row.err { background: #fff4f4; border-color: #f2c2c2; }
+  .parse-q-num { width: 32px; min-width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface); color: var(--ink-muted); font-size: 11px; font-weight: 700; }
+
+  /* ===== MISC ===== */
+  .divider { height: 1px; background: var(--border); margin: 1.5rem 0; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .tag-multi { background: var(--accent-lt); color: var(--accent); }
+  .tag-single { background: var(--blue-lt); color: var(--blue); }
+
+  @media(max-width: 600px) {
+    .answers-grid { grid-template-columns: 1fr; }
+    .topbar { padding: 0 1rem; }
+    .screen { padding: 1.5rem 1rem; }
+    .home-title { font-size: 2rem; }
+    .stats-row { gap: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <nav class="topbar">
+    <a href="#" class="logo" onclick="showScreen('home')">
+      <span class="logo-dot"></span> ExamCraft
+    </a>
+    <div class="nav-tabs">
+      <button class="nav-tab" id="tab-home"    onclick="showScreen('home')">Trang chủ</button>
+      <button class="nav-tab" id="tab-admin"   onclick="showScreen('admin')">Tạo đề</button>
+      <button class="nav-tab" id="tab-exam"    onclick="showScreen('exam-load')">Làm bài</button>
+      <button class="nav-tab" id="tab-history" onclick="showScreen('history')">Lịch sử</button>
+    </div>
+  </nav>
+
+  <!-- HOME -->
+  <div class="screen active" id="screen-home">
+    <div class="home-hero">
+      <div class="home-title">Thi trắc nghiệm<br><em style="color:var(--accent)">chuyên nghiệp</em></div>
+      <div class="home-sub">Tạo đề thi, làm bài, chấm điểm tự động — ngay trên trình duyệt, không cần cài đặt.</div>
+      <div class="row" style="justify-content:center;gap:12px;">
+        <button class="btn btn-primary btn-lg" onclick="showScreen('admin')">✏️ Tạo đề thi</button>
+        <button class="btn btn-secondary btn-lg" onclick="showScreen('exam-load')">📝 Làm bài</button>
+      </div>
+    </div>
+    <div class="home-cards">
+      <div class="home-card" onclick="showScreen('admin')">
+        <div class="home-card-icon">🛠️</div>
+        <div class="home-card-title">Tạo đề thi</div>
+        <div class="home-card-desc">Thêm câu hỏi, chọn đáp án đúng (đơn hoặc nhiều lựa chọn), xuất JSON.</div>
+      </div>
+      <div class="home-card" onclick="showScreen('exam-load')">
+        <div class="home-card-icon">🎯</div>
+        <div class="home-card-title">Làm bài thi</div>
+        <div class="home-card-desc">Load đề từ JSON, có đồng hồ đếm ngược, nộp bài và xem kết quả ngay.</div>
+      </div>
+      <div class="home-card" onclick="showScreen('history')">
+        <div class="home-card-icon">📊</div>
+        <div class="home-card-title">Lịch sử thi</div>
+        <div class="home-card-desc">Xem lại các lần thi trước, điểm số và thời gian hoàn thành.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN: TẠO ĐỀ -->
+  <div class="screen" id="screen-admin">
+    <div class="row">
+      <div>
+        <div class="page-title">✏️ Tạo đề thi</div>
+        <div class="page-sub">Thêm câu hỏi và xuất ra file JSON để dùng trong phần làm bài.</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary" onclick="clearAllQuestions()">🗑 Xóa tất cả</button>
+      <button class="btn btn-primary" onclick="addQuestion()">+ Thêm câu hỏi</button>
+    </div>
+
+    <!-- Exam settings -->
+    <div class="card" style="margin-bottom:1.25rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;flex-wrap:wrap;">
+        <div>
+          <label class="field-label">Tên đề thi</label>
+          <input type="text" id="exam-name" placeholder="VD: Kiểm tra Toán 12" value="Đề thi trắc nghiệm">
+        </div>
+        <div>
+          <label class="field-label">Thời gian (phút)</label>
+          <input type="text" id="exam-time" placeholder="60" value="30" style="width:100%">
+        </div>
+        <div>
+          <label class="field-label">Điểm đạt (%)</label>
+          <input type="text" id="exam-pass" placeholder="70" value="70" style="width:100%">
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <label class="field-label">Mô tả đề thi</label>
+        <input type="text" id="exam-desc" placeholder="Mô tả ngắn về đề thi..." value="">
+      </div>
+    </div>
+
+    <div id="questions-container"></div>
+
+    <div class="row" style="margin-top:1.5rem;">
+      <button class="btn btn-secondary" onclick="addQuestion()">+ Thêm câu hỏi</button>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary" onclick="showImport()">📂 Import JSON</button>
+      <button class="btn btn-secondary" onclick="showFileImport()">📄 Import TXT</button>
+      <button class="btn btn-dark btn-lg" onclick="exportExam()">💾 Xuất đề thi (JSON)</button>
+    </div>
+
+    <!-- Export output -->
+    <div id="export-area" style="display:none;margin-top:1.5rem;">
+      <div class="row" style="margin-bottom:.5rem;">
+        <div class="page-title" style="font-size:1rem;">📋 JSON xuất ra</div>
+        <div class="spacer"></div>
+        <button class="btn btn-sm btn-secondary" onclick="copyJSON()">📋 Sao chép</button>
+        <button class="btn btn-sm btn-primary" onclick="downloadJSON()">⬇ Tải xuống</button>
+        <button class="btn btn-sm btn-dark" onclick="saveToDB()">💾 Lưu vào DB</button>
+      </div>
+      <textarea class="json-area" id="json-output" readonly></textarea>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="goToExamWithCurrent()">▶ Làm bài luôn với đề này</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORT MODAL -->
+  <div class="modal-backdrop" id="import-modal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title">📂 Import JSON</div>
+      <div class="modal-body">Dán nội dung JSON của đề thi vào đây để import câu hỏi.</div>
+      <textarea class="json-area" id="import-input" placeholder='{"name":"...","questions":[...]}' style="min-height:200px;margin-bottom:1rem;"></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="hideImport()">Huỷ</button>
+        <button class="btn btn-primary" onclick="importJSON()">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TXT IMPORT MODAL -->
+  <div class="modal-backdrop" id="file-import-modal" style="display:none;">
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-title">📄 Import TXT</div>
+      <div class="modal-body">Chọn file .txt hoặc dán nội dung văn bản theo định dạng câu hỏi và đáp án trực tiếp. Hỗ trợ cả dạng inline như: <strong>Câu 1 ai lam gi ? *A. toi la ai B. day la dau C. 1234 D. ai lam gi</strong></div>
+      <div class="file-import-row">
+        <label class="btn btn-secondary">
+          📁 Chọn file TXT <input type="file" accept=".txt" style="display:none" onchange="handleFileTxt(event)">
+        </label>
+        <button class="btn btn-secondary" onclick="parseTxtFromTab()">🔎 Parse nội dung</button>
+        <span style="color:var(--ink-muted);font-size:13px;">Hoặc dán trực tiếp dưới đây</span>
+      </div>
+      <textarea class="json-area" id="txt-paste-area" placeholder="Câu 1 ai lam gi ? *A. toi la ai B. day la dau C. 1234 D. ai lam gi E. khong biet" style="min-height:210px;margin-bottom:0.75rem;"></textarea>
+      <div id="file-parse-preview" class="file-parse-preview" style="display:none;">
+        <div id="parse-status" class="parse-status"></div>
+        <div id="parse-preview-list" class="parse-preview-list"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="hideFileImport()">Huỷ</button>
+        <button class="btn btn-primary" id="file-import-confirm" onclick="confirmFileImport()">Import câu hỏi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXAM LOAD -->
+  <div class="screen" id="screen-exam-load">
+    <div class="page-title">📝 Bắt đầu làm bài</div>
+    <div class="page-sub">Load đề thi từ JSON để bắt đầu.</div>
+
+    <div class="card">
+      <div style="margin-bottom:1rem;">
+        <label class="field-label">Chọn đề từ DB</label>
+        <select id="db-exam-select" onchange="loadExamFromDB(this.value)" style="width:100%;margin-bottom:8px;">
+          <option value="">-- Chọn đề thi --</option>
+        </select>
+        <button class="btn btn-sm btn-secondary" onclick="loadExamsFromDB()">🔄 Tải danh sách</button>
+      </div>
+      <label class="field-label">Hoặc dán JSON đề thi vào đây</label>
+      <textarea class="json-area" id="exam-json-input" placeholder='Dán nội dung JSON đề thi...' style="min-height:200px;"></textarea>
+      <div class="row" style="margin-top:1rem;">
+        <label class="btn btn-secondary" style="cursor:pointer;">
+          📁 Chọn file JSON <input type="file" accept=".json" style="display:none" onchange="loadJSONFile(event)">
+        </label>
+        <button class="btn btn-secondary" onclick="loadSampleExam()">🎲 Dùng đề mẫu</button>
+        <div class="spacer"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="shuffle-q" style="width:auto"> Random câu hỏi
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="practice-mode" style="width:auto"> Chế độ luyện tập
+        </label>
+        <button class="btn btn-primary btn-lg" onclick="startExam()">▶ Bắt đầu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXAM TAKING -->
+  <div class="screen" id="screen-exam">
+    <!-- exam topbar, progress, nav, question, actions injected by JS -->
+  </div>
+
+  <!-- RESULT -->
+  <div class="screen" id="screen-result">
+    <!-- injected by JS -->
+  </div>
+
+  <!-- HISTORY -->
+  <div class="screen" id="screen-history">
+    <div class="row">
+      <div>
+        <div class="page-title">📊 Lịch sử thi</div>
+        <div class="page-sub">Các lần thi đã làm được lưu tại đây.</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn btn-danger btn-sm" onclick="clearHistory()">🗑 Xóa lịch sử</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+</div><!-- .app -->
+
+<script src="app.js"></script>
+</body>
+</html>
