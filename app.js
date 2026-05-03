@@ -14,6 +14,7 @@ let timeLeft      = 0;
 let examStartTime = null;
 let isPracticeMode = false; // true for practice, false for exam
 let showCorrect = false; // for practice mode
+let selectedQuestionIndexes = [];
 
 // ── SCREEN MANAGEMENT ────────────────────────────────────────
 function showScreen(id) {
@@ -324,6 +325,80 @@ function loadSampleExam() {
   };
   document.getElementById('exam-json-input').value = JSON.stringify(sample, null, 2);
   toast('🎲 Đã load đề mẫu!', 'success');
+  renderQuestionSelection(sample);
+}
+
+function previewQuestions() {
+  const jsonStr = document.getElementById('exam-json-input').value.trim();
+  if (!jsonStr) {
+    toast('⚠ Vui lòng nhập hoặc dán JSON đề thi trước.', 'error');
+    return;
+  }
+
+  try {
+    const data = normalizeExamData(JSON.parse(jsonStr));
+    if (!data.questions || data.questions.length === 0) throw new Error('Không có câu hỏi');
+    renderQuestionSelection(data);
+    toast('✅ Danh sách câu hỏi đã được cập nhật.', 'success');
+  } catch (e) {
+    toast('❌ JSON không hợp lệ: ' + e.message, 'error');
+  }
+}
+
+function renderQuestionSelection(data) {
+  selectedQuestionIndexes = data.questions.map((_, idx) => idx);
+  const panel = document.getElementById('question-selection-panel');
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="card-header">Chọn câu hỏi</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>Chọn câu hỏi bạn muốn làm ở chế độ thi / luyện tập.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-secondary" onclick="toggleSelectAll(true)">Chọn tất cả</button>
+        <button class="btn btn-sm btn-secondary" onclick="toggleSelectAll(false)">Bỏ chọn</button>
+      </div>
+    </div>
+    <div class="question-selection-summary" id="selection-summary" style="margin-top:0.75rem;font-size:0.95rem;color:var(--ink-muted);"></div>
+    <div class="question-selection-list" id="question-selection-list" style="margin-top:0.75rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;"></div>
+  `;
+
+  const list = document.getElementById('question-selection-list');
+  list.innerHTML = data.questions.map((q, idx) => {
+    const label = q.text.length > 80 ? escHtml(q.text.slice(0, 77) + '...') : escHtml(q.text);
+    return `
+      <label class="question-select-row" style="display:flex;align-items:flex-start;gap:8px;padding:0.8rem;border:1px solid var(--border);border-radius:0.75rem;cursor:pointer;">
+        <input type="checkbox" checked onchange="toggleQuestionSelection(${idx}, this.checked)" style="margin-top:4px;" />
+        <div>
+          <div style="font-weight:600;margin-bottom:4px;">Câu ${idx + 1}</div>
+          <div style="font-size:0.95rem;line-height:1.4;">${label}</div>
+        </div>
+      </label>`;
+  }).join('');
+  updateSelectionSummary();
+}
+
+function toggleQuestionSelection(idx, checked) {
+  if (checked && !selectedQuestionIndexes.includes(idx)) {
+    selectedQuestionIndexes.push(idx);
+  } else if (!checked) {
+    selectedQuestionIndexes = selectedQuestionIndexes.filter(i => i !== idx);
+  }
+  updateSelectionSummary();
+}
+
+function toggleSelectAll(value) {
+  const inputs = document.querySelectorAll('#question-selection-list input[type=checkbox]');
+  inputs.forEach((input, idx) => {
+    input.checked = value;
+  });
+  selectedQuestionIndexes = value ? Array.from({ length: inputs.length }, (_, idx) => idx) : [];
+  updateSelectionSummary();
+}
+
+function updateSelectionSummary() {
+  const summary = document.getElementById('selection-summary');
+  if (!summary) return;
+  summary.textContent = `Đã chọn ${selectedQuestionIndexes.length} câu trên tổng ${document.querySelectorAll('#question-selection-list input[type=checkbox]').length} câu.`;
 }
 
 function loadExamsFromDB() {
@@ -367,10 +442,24 @@ function startExam() {
     const data = normalizeExamData(rawData);
     if (!data.questions || data.questions.length === 0) throw new Error('Không có câu hỏi');
 
-    currentExam = data;
+    const panelVisible = document.getElementById('question-selection-panel')?.style.display === 'block';
+    const selectedIndexes = panelVisible && selectedQuestionIndexes.length > 0
+      ? selectedQuestionIndexes.filter(i => i >= 0 && i < data.questions.length)
+      : data.questions.map((_, idx) => idx);
+
+    if (panelVisible && selectedIndexes.length === 0) {
+      toast('⚠ Vui lòng chọn ít nhất 1 câu hỏi.', 'error');
+      return;
+    }
+
+    const questions = selectedIndexes.length > 0
+      ? selectedIndexes.map(i => data.questions[i])
+      : data.questions;
+
+    currentExam = { ...data, questions };
     isPracticeMode = document.getElementById('practice-mode').checked;
     if (document.getElementById('shuffle-q').checked) {
-      currentExam.questions = [...data.questions].sort(() => Math.random() - 0.5);
+      currentExam.questions = [...currentExam.questions].sort(() => Math.random() - 0.5);
     }
 
     userAnswers = {};
@@ -410,6 +499,15 @@ function renderExamView() {
             ${currentExam.desc ? `<span class="meta-pill">ℹ ${escHtml(currentExam.desc)}</span>` : ''}
           </div>
         </div>
+      </div>
+
+      <div class="q-nav-dots">
+        ${currentExam.questions.map((_,i) => {
+          let cls = 'q-dot';
+          if (i === currentQIndex) cls += ' current';
+          if (userAnswers[i] && userAnswers[i].size > 0) cls += ' answered';
+          return `<div class="${cls}" onclick="gotoQ(${i})" title="Câu ${i+1}">${i+1}</div>`;
+        }).join('')}
       </div>
 
       <div class="question-display">
@@ -526,6 +624,7 @@ function renderExamView() {
 
 function gotoQ(idx) {
   currentQIndex = idx;
+  if (isPracticeMode) showCorrect = false;
   renderExamView();
 }
 
