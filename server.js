@@ -127,6 +127,37 @@ app.get('/exam/:id', (req, res) => {
   });
 });
 
+app.put('/exam/:id', (req, res) => {
+  const examId = req.params.id;
+  const { name, desc, timeLimitMinutes, passPercent, questions } = req.body;
+  const sql = 'UPDATE exams SET name = ?, description = ?, timeLimitMinutes = ?, passPercent = ? WHERE id = ?';
+  db.query(sql, [name, desc, timeLimitMinutes, passPercent, examId], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Exam not found' });
+    // Delete old questions
+    db.query('DELETE FROM questions WHERE exam_id = ?', [examId], (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      // Insert new questions
+      const qSql = 'INSERT INTO questions (exam_id, text, answers, correct, isMulti) VALUES ?';
+      const qValues = questions.map(q => [examId, q.text, JSON.stringify(q.answers), JSON.stringify(q.correct), q.isMulti]);
+      db.query(qSql, [qValues], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ examId });
+      });
+    });
+  });
+});
+
+app.delete('/exam/:id', (req, res) => {
+  const examId = req.params.id;
+  const sql = 'DELETE FROM exams WHERE id = ?';
+  db.query(sql, [examId], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Exam not found' });
+    res.json({ message: 'Exam deleted' });
+  });
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });

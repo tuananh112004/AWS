@@ -376,6 +376,7 @@
     <div class="nav-tabs">
       <button class="nav-tab" id="tab-home"    onclick="showScreen('home')">Trang chủ</button>
       <button class="nav-tab" id="tab-admin"   onclick="showScreen('admin')">Tạo đề</button>
+      <button class="nav-tab" id="tab-manage"  onclick="showScreen('manage')">Quản lý đề</button>
       <button class="nav-tab" id="tab-exam"    onclick="showScreen('exam-load')">Làm bài</button>
       <button class="nav-tab" id="tab-history" onclick="showScreen('history')">Lịch sử</button>
     </div>
@@ -396,6 +397,11 @@
         <div class="home-card-icon">🛠️</div>
         <div class="home-card-title">Tạo đề thi</div>
         <div class="home-card-desc">Thêm câu hỏi, chọn đáp án đúng (đơn hoặc nhiều lựa chọn), xuất JSON.</div>
+      </div>
+      <div class="home-card" onclick="showScreen('manage')">
+        <div class="home-card-icon">📋</div>
+        <div class="home-card-title">Quản lý đề thi</div>
+        <div class="home-card-desc">Xem, sửa, xóa các đề thi đã lưu trong cơ sở dữ liệu.</div>
       </div>
       <div class="home-card" onclick="showScreen('exam-load')">
         <div class="home-card-icon">🎯</div>
@@ -505,6 +511,20 @@
         <button class="btn btn-primary" id="file-import-confirm" onclick="confirmFileImport()">Import câu hỏi</button>
       </div>
     </div>
+  </div>
+
+  <!-- MANAGE: QUẢN LÝ ĐỀ -->
+  <div class="screen" id="screen-manage">
+    <div class="row">
+      <div>
+        <div class="page-title">📋 Quản lý đề thi</div>
+        <div class="page-sub">Xem, sửa, xóa các đề thi đã lưu.</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary" onclick="loadManageExams()">🔄 Tải lại</button>
+    </div>
+
+    <div id="manage-list"></div>
   </div>
 
   <!-- EXAM LOAD -->

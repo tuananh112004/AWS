@@ -24,13 +24,14 @@ function showScreen(id) {
   const screenMap = {
     'home':      'screen-home',
     'admin':     'screen-admin',
+    'manage':    'screen-manage',
     'exam-load': 'screen-exam-load',
     'exam':      'screen-exam',
     'result':    'screen-result',
     'history':   'screen-history',
   };
   const tabMap = {
-    'home': 'tab-home', 'admin': 'tab-admin',
+    'home': 'tab-home', 'admin': 'tab-admin', 'manage': 'tab-manage',
     'exam-load': 'tab-exam', 'exam': 'tab-exam',
     'result': 'tab-exam', 'history': 'tab-history',
   };
@@ -41,6 +42,7 @@ function showScreen(id) {
   if (tabEl) tabEl.classList.add('active');
 
   if (id === 'history') renderHistory();
+  if (id === 'manage') loadManageExams();
   if (id === 'admin' && adminQuestions.length === 0) addQuestion();
 }
 
@@ -295,6 +297,122 @@ function importJSON() {
   } catch(e) {
     toast('❌ JSON không hợp lệ: ' + e.message, 'error');
   }
+}
+
+// ── MANAGE EXAMS ────────────────────────────────────────────
+function loadManageExams() {
+  fetch('http://localhost:3000/exams')
+  .then(res => res.json())
+  .then(exams => {
+    renderManageList(exams);
+  })
+  .catch(err => {
+    toast('❌ Không tải được danh sách đề thi.', 'error');
+  });
+}
+
+function renderManageList(exams) {
+  const container = document.getElementById('manage-list');
+  if (exams.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>Chưa có đề thi nào. Tạo đề mới tại "Tạo đề".</p></div>`;
+    return;
+  }
+
+  container.innerHTML = exams.map(exam => `
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:1.1rem;margin-bottom:4px;">${escHtml(exam.name)}</div>
+          <div style="color:var(--ink-muted);font-size:0.9rem;">
+            ${exam.description ? escHtml(exam.description) + ' • ' : ''}
+            ${exam.timeLimitMinutes} phút • Điểm đạt ${exam.passPercent}% • 
+            ${new Date(exam.createdAt).toLocaleDateString('vi-VN')}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="editExam(${exam.id})">✏️ Sửa</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteExam(${exam.id}, '${escHtml(exam.name)}')">🗑 Xóa</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function editExam(examId) {
+  fetch(`http://localhost:3000/exam/${examId}`)
+  .then(res => res.json())
+  .then(exam => {
+    // Load into admin
+    document.getElementById('exam-name').value = exam.name;
+    document.getElementById('exam-desc').value = exam.description || '';
+    document.getElementById('exam-time').value = exam.timeLimitMinutes;
+    document.getElementById('exam-pass').value = exam.passPercent;
+    adminQuestions = exam.questions.map(q => ({
+      text: q.text,
+      answers: q.answers,
+      correct: q.correct,
+      isMulti: q.isMulti,
+    }));
+    renderAdminQuestions();
+    document.getElementById('export-area').style.display = 'none';
+    // Add update button
+    const exportArea = document.getElementById('export-area');
+    exportArea.innerHTML = `
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="updateExam(${examId})">💾 Cập nhật đề thi</button>
+      </div>
+    `;
+    exportArea.style.display = 'block';
+    showScreen('admin');
+    toast('✅ Đã load đề để sửa!', 'success');
+  })
+  .catch(err => {
+    toast('❌ Lỗi load đề thi.', 'error');
+  });
+}
+
+function updateExam(examId) {
+  const errors = validateAdmin();
+  if (errors.length) { toast('⚠ ' + errors[0], 'error'); return; }
+
+  const examData = buildExamJSON();
+  fetch(`http://localhost:3000/exam/${examId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(examData)
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      toast('❌ Lỗi cập nhật: ' + data.error, 'error');
+    } else {
+      toast('✅ Đã cập nhật đề thi!', 'success');
+      showScreen('manage');
+      loadManageExams();
+    }
+  })
+  .catch(err => {
+    toast('❌ Không kết nối được server.', 'error');
+  });
+}
+
+function deleteExam(examId, name) {
+  if (!confirm(`Xóa đề thi "${name}"?`)) return;
+  fetch(`http://localhost:3000/exam/${examId}`, {
+    method: 'DELETE'
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      toast('❌ Lỗi xóa: ' + data.error, 'error');
+    } else {
+      toast('✅ Đã xóa đề thi!', 'success');
+      loadManageExams();
+    }
+  })
+  .catch(err => {
+    toast('❌ Không kết nối được server.', 'error');
+  });
 }
 
 // ── EXAM LOAD ─────────────────────────────────────────────────
