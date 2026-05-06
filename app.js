@@ -59,7 +59,7 @@ function toast(msg, type = '') {
 function addQuestion(data = null) {
   const q = data || {
     text: '',
-    answers: ['', '', '', '', ''],
+    answers: ['', '', '', '', '', ''],
     correct: [], // array of indexes
     isMulti: false,
   };
@@ -81,6 +81,17 @@ function clearAllQuestions() {
   if (adminQuestions.length === 0) return;
   if (!confirm('Xoá tất cả câu hỏi?')) return;
   adminQuestions = [];
+  document.getElementById('export-area').style.display = 'none';
+  renderAdminQuestions();
+}
+
+function resetAdminData() {
+  // Clear all questions and reset form fields
+  adminQuestions = [];
+  document.getElementById('exam-name').value = 'Đề thi trắc nghiệm';
+  document.getElementById('exam-time').value = '30';
+  document.getElementById('exam-pass').value = '70';
+  document.getElementById('exam-desc').value = '';
   document.getElementById('export-area').style.display = 'none';
   renderAdminQuestions();
 }
@@ -115,8 +126,8 @@ function renderAdminQuestions() {
               <div class="answer-row">
                 <div class="answer-label ${isCorrect ? 'correct' : ''}"
                      title="Đánh dấu đáp án đúng"
-                     onclick="toggleCorrect(${qi},${ai},${q.isMulti})">${'ABCDE'[ai]}</div>
-                <input type="text" placeholder="Đáp án ${'ABCDE'[ai]}..."
+                     onclick="toggleCorrect(${qi},${ai},${q.isMulti})">${'ABCDEF'[ai]}</div>
+                <input type="text" placeholder="Đáp án ${'ABCDEF'[ai]}..."
                        value="${escHtml(ans)}"
                        oninput="updateAnswer(${qi},${ai},this.value)">
               </div>`;
@@ -128,7 +139,7 @@ function renderAdminQuestions() {
         <input type="checkbox" id="multi-${qi}" ${q.isMulti ? 'checked' : ''} onchange="toggleMulti(${qi},this.checked)">
         <label for="multi-${qi}" style="cursor:pointer;">Cho phép chọn nhiều đáp án đúng</label>
         <span style="margin-left:auto;font-size:11px;color:var(--accent);">
-          ✓ Đúng: ${q.correct.length > 0 ? q.correct.map(i => 'ABCD'[i]).join(', ') : 'Chưa chọn'}
+          ✓ Đúng: ${q.correct.length > 0 ? q.correct.map(i => 'ABCDEF'[i]).join(', ') : 'Chưa chọn'}
         </span>
       </div>
     </div>
@@ -279,6 +290,7 @@ function hideImport()  { document.getElementById('import-modal').style.display =
 
 function importJSON() {
   try {
+    resetAdminData();
     const data = JSON.parse(document.getElementById('import-input').value);
     if (!data.questions || !Array.isArray(data.questions)) throw new Error('Sai định dạng');
     if (data.name) document.getElementById('exam-name').value = data.name;
@@ -287,7 +299,7 @@ function importJSON() {
     if (data.desc) document.getElementById('exam-desc').value = data.desc;
     adminQuestions = data.questions.map(q => ({
       text: q.text || '',
-      answers: q.answers || ['','','','',''],
+      answers: q.answers || ['','','','','',''],
       correct: q.correct || [],
       isMulti: q.isMulti || false,
     }));
@@ -342,6 +354,8 @@ function editExam(examId) {
   fetch(`http://localhost:3000/exam/${examId}`)
   .then(res => res.json())
   .then(exam => {
+    // Reset admin data first
+    resetAdminData();
     // Load into admin
     document.getElementById('exam-name').value = exam.name;
     document.getElementById('exam-desc').value = exam.description || '';
@@ -349,7 +363,7 @@ function editExam(examId) {
     document.getElementById('exam-pass').value = exam.passPercent;
     adminQuestions = exam.questions.map(q => ({
       text: q.text,
-      answers: q.answers,
+      answers: [...(q.answers || []), '', '', '', '', '', ''].slice(0, 6),
       correct: q.correct,
       isMulti: q.isMulti,
     }));
@@ -648,7 +662,7 @@ function renderExamView() {
             return `
               <button class="option-item ${cls}" ${showCorrect ? 'disabled' : ''}
                       onclick="toggleAnswer(${currentQIndex},${ai},${q.isMulti})">
-                <div class="opt-letter">${'ABCDE'[ai]}</div>
+                <div class="opt-letter">${'ABCDEF'[ai]}</div>
                 <div class="opt-text">${escHtml(ans)}</div>
                 ${sel ? '<div class="opt-icon">✓</div>' : ''}
               </button>`;
@@ -716,7 +730,7 @@ function renderExamView() {
             return `
               <button class="option-item ${sel ? 'selected' : ''}"
                       onclick="toggleAnswer(${currentQIndex},${ai},${q.isMulti})">
-                <div class="opt-letter">${'ABCDE'[ai]}</div>
+                <div class="opt-letter">${'ABCDEF'[ai]}</div>
                 <div class="opt-text">${escHtml(ans)}</div>
                 ${sel ? '<div class="opt-icon">✓</div>' : ''}
               </button>`;
@@ -929,7 +943,7 @@ function renderReviewCard(d, i) {
           else if (!userChose && isRight) { cls = 'missed';  icon = '← Đáp án đúng'; }
           if (!cls) return '';
           return `<div class="review-option ${cls}">
-            <strong>${'ABCDE'[ai]}.</strong> ${escHtml(ans)}
+            <strong>${'ABCDEF'[ai]}.</strong> ${escHtml(ans)}
             <span style="margin-left:auto;font-size:11px;opacity:.8">${icon}</span>
           </div>`;
         }).join('')}
@@ -1362,7 +1376,13 @@ function confirmFileImport() {
   const append = adminQuestions.length > 0
     && confirm(`Bạn đang có ${adminQuestions.length} câu hỏi. Thêm vào hay thay thế?\n\nOK = Thêm vào cuối | Cancel = Thay thế tất cả`);
 
-  if (!append) adminQuestions = [];
+  if (!append) {
+    adminQuestions = [];
+    document.getElementById('exam-name').value = 'Đề thi trắc nghiệm';
+    document.getElementById('exam-time').value = '30';
+    document.getElementById('exam-pass').value = '70';
+    document.getElementById('exam-desc').value = '';
+  }
   valid.forEach(q => adminQuestions.push({
     text: q.text,
     answers: q.answers,

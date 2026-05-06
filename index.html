@@ -148,7 +148,7 @@
   }
   .q-num-title { font-weight: 600; font-size: .88rem; flex: 1; }
   .q-delete { margin-left: auto; }
-  .answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 1rem; }
+  .answers-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 1rem; }
   .answer-row { display: flex; align-items: center; gap: 8px; }
   .answer-label {
     width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border);
@@ -424,6 +424,7 @@
         <div class="page-sub">Thêm câu hỏi và xuất ra file JSON để dùng trong phần làm bài.</div>
       </div>
       <div class="spacer"></div>
+      <button class="btn btn-secondary" onclick="resetAdminData()">📄 Tạo đề mới</button>
       <button class="btn btn-secondary" onclick="clearAllQuestions()">🗑 Xóa tất cả</button>
       <button class="btn btn-primary" onclick="addQuestion()">+ Thêm câu hỏi</button>
     </div>
