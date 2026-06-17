@@ -1,6 +1,6 @@
 const path = require('path');
 const express = require('express');
-const mysql = require('mysql2');
+const { MongoClient, ObjectId } = require('mongodb');
 const cors = require('cors');
 
 const app = express();
@@ -8,65 +8,38 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// MySQL connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root', // change as needed
-  password: 'root', // change as needed
-  database: 'aws'
-});
+const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://bonsdark02:cunto2004@cluster0.hhxrjre.mongodb.net/?retryWrites=true&w=majority';
+const dbName = process.env.MONGODB_DB_NAME || 'aws';
 
-db.connect((err) => {
-  if (err) {
-    console.error('DB connection failed:', err);
-  } else {
-    console.log('Connected to MySQL');
+let db;
+let examsCollection;
+let historyCollection;
+
+async function initDb() {
+  try {
+    const client = new MongoClient(mongoUri);
+    await client.connect();
+    db = client.db(dbName);
+    examsCollection = db.collection('exams');
+    historyCollection = db.collection('exam_history');
+
+    await examsCollection.createIndex({ createdAt: -1 });
+    await historyCollection.createIndex({ date: -1 });
+
+    console.log('Connected to MongoDB');
+    return client;
+  } catch (err) {
+    console.error('MongoDB connection failed:', err);
+    process.exit(1);
   }
-});
+}
 
-// Create tables if not exist
-db.query(`
-  CREATE TABLE IF NOT EXISTS exams (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    timeLimitMinutes INT DEFAULT 30,
-    passPercent INT DEFAULT 70,
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`, (err) => {
-  if (err) console.error('Create exams table error:', err);
-});
-
-db.query(`
-  CREATE TABLE IF NOT EXISTS questions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    exam_id INT,
-    text TEXT NOT NULL,
-    answers JSON,
-    correct JSON,
-    isMulti BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE
-  )
-`, (err) => {
-  if (err) console.error('Create questions table error:', err);
-});
-
-db.query(`
-  CREATE TABLE IF NOT EXISTS exam_history (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    exam_name VARCHAR(255) NOT NULL,
-    pct INT DEFAULT 0,
-    correct INT DEFAULT 0,
-    total INT DEFAULT 0,
-    passed BOOLEAN DEFAULT FALSE,
-    time_taken INT DEFAULT 0,
-    pass_percent INT DEFAULT 0,
-    date DATETIME,
-    details JSON
-  )
-`, (err) => {
-  if (err) console.error('Create exam_history table error:', err);
+initDb().then(client => {
+  app.listen(3000, () => {
+    console.log('Server running on port 3000');
+  });
+}).catch(() => {
+  process.exit(1);
 });
 
 function parseJSONOrArray(value) {
@@ -96,129 +69,203 @@ function normalizeDetails(details) {
   return [];
 }
 
-// API endpoints
-app.post('/save-exam', (req, res) => {
+function mapExamForList(exam) {
+  return {
+    id: exam._id.toString(),
+    name: exam.name,
+    description: exam.description,
+    timeLimitMinutes: exam.timeLimitMinutes,
+    passPercent: exam.passPercent,
+    createdAt: exam.createdAt
+  };
+}
+
+app.post('/save-exam', async (req, res) => {
   const { name, desc, timeLimitMinutes, passPercent, questions } = req.body;
-  const sql = 'INSERT INTO exams (name, description, timeLimitMinutes, passPercent) VALUES (?, ?, ?, ?)';
-  db.query(sql, [name, desc, timeLimitMinutes, passPercent], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const examId = result.insertId;
-    const qSql = 'INSERT INTO questions (exam_id, text, answers, correct, isMulti) VALUES ?';
-    const qValues = questions.map(q => [examId, q.text, JSON.stringify(q.answers), JSON.stringify(q.correct), q.isMulti]);
-    db.query(qSql, [qValues], (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ examId });
-    });
-  });
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ error: 'Exam must include questions' });
+  }
+
+  const examDoc = {
+    name,
+    description: desc,
+    timeLimitMinutes,
+    passPercent,
+    createdAt: new Date(),
+    questions: questions.map(q => ({
+      text: q.text,
+      answers: Array.isArray(q.answers) ? q.answers : [],
+      correct: Array.isArray(q.correct) ? q.correct : q.correct !== undefined ? [q.correct] : [],
+      isMulti: Boolean(q.isMulti)
+    }))
+  };
+
+  try {
+    const result = await examsCollection.insertOne(examDoc);
+    res.json({ examId: result.insertedId.toString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get('/exams', (req, res) => {
-  const sql = 'SELECT id, name, description, timeLimitMinutes, passPercent, createdAt FROM exams ORDER BY createdAt DESC';
-  db.query(sql, (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(results);
-  });
+app.get('/exams', async (req, res) => {
+  try {
+    const exams = await examsCollection
+      .find({}, { projection: { name: 1, description: 1, timeLimitMinutes: 1, passPercent: 1, createdAt: 1 } })
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(exams.map(mapExamForList));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get('/exam/:id', (req, res) => {
+app.get('/exam/:id', async (req, res) => {
   const examId = req.params.id;
-  const examSql = 'SELECT * FROM exams WHERE id = ?';
-  db.query(examSql, [examId], (err, examResults) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (examResults.length === 0) return res.status(404).json({ error: 'Exam not found' });
-    const exam = examResults[0];
-    const qSql = 'SELECT text, answers, correct, isMulti FROM questions WHERE exam_id = ? ORDER BY id';
-    db.query(qSql, [examId], (err, qResults) => {
-      if (err) return res.status(500).json({ error: err.message });
-      exam.questions = qResults.map(q => ({
-        text: q.text,
-        answers: parseJSONOrArray(q.answers),
-        correct: parseJSONOrArray(q.correct)
-          .map(ch => {
-            if (typeof ch === 'number' && Number.isInteger(ch)) return ch;
-            if (typeof ch === 'string') {
-              const trimmed = ch.trim();
-              if (/^[0-9]+$/.test(trimmed)) return parseInt(trimmed, 10);
-              const letterMatch = trimmed.toUpperCase().match(/^([A-E])$/);
-              if (letterMatch) return letterMatch[1].charCodeAt(0) - 65;
-            }
-            return null;
-          })
-          .filter(idx => Number.isInteger(idx) && idx >= 0),
-        isMulti: q.isMulti
-      }));
-      res.json(exam);
-    });
-  });
+  let objectId;
+
+  try {
+    objectId = new ObjectId(examId);
+  } catch {
+    return res.status(400).json({ error: 'Invalid exam ID' });
+  }
+
+  try {
+    const exam = await examsCollection.findOne({ _id: objectId });
+    if (!exam) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+
+    exam.id = exam._id.toString();
+    delete exam._id;
+    res.json(exam);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put('/exam/:id', (req, res) => {
+app.put('/exam/:id', async (req, res) => {
   const examId = req.params.id;
   const { name, desc, timeLimitMinutes, passPercent, questions } = req.body;
-  const sql = 'UPDATE exams SET name = ?, description = ?, timeLimitMinutes = ?, passPercent = ? WHERE id = ?';
-  db.query(sql, [name, desc, timeLimitMinutes, passPercent, examId], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'Exam not found' });
-    // Delete old questions
-    db.query('DELETE FROM questions WHERE exam_id = ?', [examId], (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      // Insert new questions
-      const qSql = 'INSERT INTO questions (exam_id, text, answers, correct, isMulti) VALUES ?';
-      const qValues = questions.map(q => [examId, q.text, JSON.stringify(q.answers), JSON.stringify(q.correct), q.isMulti]);
-      db.query(qSql, [qValues], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ examId });
-      });
-    });
-  });
+  let objectId;
+
+  try {
+    objectId = new ObjectId(examId);
+  } catch {
+    return res.status(400).json({ error: 'Invalid exam ID' });
+  }
+
+  try {
+    const update = {
+      $set: {
+        name,
+        description: desc,
+        timeLimitMinutes,
+        passPercent,
+        questions: Array.isArray(questions) ? questions.map(q => ({
+          text: q.text,
+          answers: Array.isArray(q.answers) ? q.answers : [],
+          correct: Array.isArray(q.correct) ? q.correct : q.correct !== undefined ? [q.correct] : [],
+          isMulti: Boolean(q.isMulti)
+        })) : []
+      }
+    };
+
+    const result = await examsCollection.updateOne({ _id: objectId }, update);
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+    res.json({ examId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/exam/:id', (req, res) => {
+app.delete('/exam/:id', async (req, res) => {
   const examId = req.params.id;
-  const sql = 'DELETE FROM exams WHERE id = ?';
-  db.query(sql, [examId], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'Exam not found' });
+  let objectId;
+
+  try {
+    objectId = new ObjectId(examId);
+  } catch {
+    return res.status(400).json({ error: 'Invalid exam ID' });
+  }
+
+  try {
+    const result = await examsCollection.deleteOne({ _id: objectId });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
     res.json({ message: 'Exam deleted' });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/history', (req, res) => {
+app.post('/history', async (req, res) => {
   const { examName, pct, correct, total, passed, timeTaken, passPercent, date, details } = req.body;
-  const sql = 'INSERT INTO exam_history (exam_name, pct, correct, total, passed, time_taken, pass_percent, date, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
-  const dateValue = date ? new Date(date) : new Date();
-  db.query(sql, [examName, pct, correct, total, passed ? 1 : 0, timeTaken, passPercent, dateValue, JSON.stringify(details || [])], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ historyId: result.insertId });
-  });
+  const historyDoc = {
+    examName,
+    pct,
+    correct,
+    total,
+    passed: Boolean(passed),
+    timeTaken,
+    passPercent,
+    date: date ? new Date(date) : new Date(),
+    details: Array.isArray(details) ? details : normalizeDetails(details)
+  };
+
+  try {
+    const result = await historyCollection.insertOne(historyDoc);
+    res.json({ historyId: result.insertedId.toString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get('/history', (req, res) => {
-  const sql = `SELECT id, exam_name AS examName, pct, correct, total, passed, time_taken AS timeTaken, pass_percent AS passPercent, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%s') AS date, details FROM exam_history ORDER BY date DESC`;
-  db.query(sql, (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    results.forEach(r => {
-      r.details = normalizeDetails(r.details);
-      r.passed = Boolean(r.passed);
-    });
-    res.json(results);
-  });
+app.get('/history', async (req, res) => {
+  try {
+    const history = await historyCollection.find({}).sort({ date: -1 }).toArray();
+    const mapped = history.map(entry => ({
+      id: entry._id.toString(),
+      examName: entry.examName,
+      pct: entry.pct,
+      correct: entry.correct,
+      total: entry.total,
+      passed: Boolean(entry.passed),
+      timeTaken: entry.timeTaken,
+      passPercent: entry.passPercent,
+      date: entry.date instanceof Date ? entry.date.toISOString() : entry.date,
+      details: normalizeDetails(entry.details)
+    }));
+    res.json(mapped);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/history/:id', (req, res) => {
+app.delete('/history/:id', async (req, res) => {
   const historyId = req.params.id;
-  const sql = 'DELETE FROM exam_history WHERE id = ?';
-  db.query(sql, [historyId], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'History entry not found' });
+  let objectId;
+
+  try {
+    objectId = new ObjectId(historyId);
+  } catch {
+    return res.status(400).json({ error: 'Invalid history ID' });
+  }
+
+  try {
+    const result = await historyCollection.deleteOne({ _id: objectId });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'History entry not found' });
+    }
     res.json({ message: 'History entry deleted' });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.listen(3000, () => {
-  console.log('Server running on port 3000');
 });
