@@ -52,6 +52,23 @@ db.query(`
   if (err) console.error('Create questions table error:', err);
 });
 
+db.query(`
+  CREATE TABLE IF NOT EXISTS exam_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    exam_name VARCHAR(255) NOT NULL,
+    pct INT DEFAULT 0,
+    correct INT DEFAULT 0,
+    total INT DEFAULT 0,
+    passed BOOLEAN DEFAULT FALSE,
+    time_taken INT DEFAULT 0,
+    pass_percent INT DEFAULT 0,
+    date DATETIME,
+    details JSON
+  )
+`, (err) => {
+  if (err) console.error('Create exam_history table error:', err);
+});
+
 function parseJSONOrArray(value) {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string') return [value];
@@ -69,6 +86,14 @@ function parseJSONOrArray(value) {
     }
     return [trimmed];
   }
+}
+
+function normalizeDetails(details) {
+  if (Array.isArray(details)) return details;
+  if (typeof details === 'string') {
+    try { return JSON.parse(details); } catch (err) { return []; }
+  }
+  return [];
 }
 
 // API endpoints
@@ -155,6 +180,38 @@ app.delete('/exam/:id', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Exam not found' });
     res.json({ message: 'Exam deleted' });
+  });
+});
+
+app.post('/history', (req, res) => {
+  const { examName, pct, correct, total, passed, timeTaken, passPercent, date, details } = req.body;
+  const sql = 'INSERT INTO exam_history (exam_name, pct, correct, total, passed, time_taken, pass_percent, date, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  const dateValue = date ? new Date(date) : new Date();
+  db.query(sql, [examName, pct, correct, total, passed ? 1 : 0, timeTaken, passPercent, dateValue, JSON.stringify(details || [])], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ historyId: result.insertId });
+  });
+});
+
+app.get('/history', (req, res) => {
+  const sql = `SELECT id, exam_name AS examName, pct, correct, total, passed, time_taken AS timeTaken, pass_percent AS passPercent, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%s') AS date, details FROM exam_history ORDER BY date DESC`;
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    results.forEach(r => {
+      r.details = normalizeDetails(r.details);
+      r.passed = Boolean(r.passed);
+    });
+    res.json(results);
+  });
+});
+
+app.delete('/history/:id', (req, res) => {
+  const historyId = req.params.id;
+  const sql = 'DELETE FROM exam_history WHERE id = ?';
+  db.query(sql, [historyId], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'History entry not found' });
+    res.json({ message: 'History entry deleted' });
   });
 });
 

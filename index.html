@@ -149,6 +149,7 @@
   .q-num-title { font-weight: 600; font-size: .88rem; flex: 1; }
   .q-delete { margin-left: auto; }
   .answers-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 1rem; }
+  .admin-settings-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .answer-row { display: flex; align-items: center; gap: 8px; }
   .answer-label {
     width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border);
@@ -275,14 +276,31 @@
   .review-option.correct { background: var(--green-lt); color: var(--green); }
   .review-option.wrong { background: var(--red-lt); color: var(--red); }
   .review-option.missed { background: var(--green-lt); color: var(--green); opacity: .7; }
+  .review-option.review-option-row { background: #faf9f6; color: var(--ink); }
+  .review-filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:1rem; }
+  .review-filter-btn {
+    padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--border); background: #fff;
+    color: var(--ink); cursor: pointer; font-size: .92rem; transition: all .15s;
+  }
+  .review-filter-btn:hover { background: var(--surface); }
+  .review-filter-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
 
   /* ===== HISTORY SCREEN ===== */
   .history-item {
     background: #fff; border: 1px solid var(--border); border-radius: var(--r-lg);
     padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem;
-    box-shadow: var(--shadow); margin-bottom: .75rem; transition: box-shadow .15s;
+    box-shadow: var(--shadow); margin-bottom: .75rem; transition: box-shadow .15s, border-color .15s, background .15s;
+    cursor: pointer;
   }
   .history-item:hover { box-shadow: var(--shadow-lg); }
+  .history-item.selected-history {
+    border-color: var(--accent);
+    background: #fff9f1;
+  }
   .history-score-badge {
     width: 48px; height: 48px; border-radius: 50%; display: flex;
     align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0;
@@ -356,12 +374,90 @@
   .tag-multi { background: var(--accent-lt); color: var(--accent); }
   .tag-single { background: var(--blue-lt); color: var(--blue); }
 
-  @media(max-width: 600px) {
-    .answers-grid { grid-template-columns: 1fr; }
+  @media(max-width: 900px) {
     .topbar { padding: 0 1rem; }
+    .nav-tabs { gap: 4px; }
+    .nav-tab { padding: 8px 12px; font-size: 12px; }
     .screen { padding: 1.5rem 1rem; }
+    .card { padding: 1.2rem; }
+    .page-title { font-size: 1.6rem; }
+    .page-sub, .history-meta, .home-sub { font-size: 0.95rem; }
+    .row { flex-direction: column; align-items: stretch; }
+    .spacer { display: none; }
+    .question-card { padding: 1rem; }
+    .answers-grid, .admin-settings-grid { grid-template-columns: 1fr; }
+    .question-selection-list { grid-template-columns: 1fr; }
+    .exam-topbar { flex-direction: column; align-items: stretch; gap: 0.85rem; }
+    .exam-meta-row { gap: 0.75rem; }
+    .q-nav-dots { justify-content: flex-start; overflow-x: auto; }
+    .q-dot { min-width: 32px; }
+    .option-list { gap: 10px; }
+    .option-item { width: 100%; }
+    .review-filter-bar { justify-content: flex-start; }
+    .review-filter-btn { font-size: 0.88rem; padding: 7px 12px; }
+    .history-item { flex-direction: column; align-items: stretch; }
+    .history-score-badge { width: 42px; height: 42px; }
+    .home-cards { grid-template-columns: 1fr; }
+    .home-title { font-size: 2.2rem; }
+    .modal-box { max-width: 100%; padding: 1.2rem; }
+  }
+
+  @media(max-width: 768px) {
+    .topbar { flex-wrap: wrap; justify-content: space-between; }
+    .nav-tabs { width: 100%; justify-content: flex-start; }
+    .nav-tab { flex: 1 1 auto; white-space: nowrap; }
+    .screen { padding: 1.3rem 0.9rem; }
     .home-title { font-size: 2rem; }
-    .stats-row { gap: 1rem; }
+    .home-sub { font-size: 0.95rem; }
+    .history-meta { font-size: 11.5px; }
+    .page-title { font-size: 1.5rem; }
+    .btn { width: 100%; }
+    .row:not(.exam-actions) { align-items: stretch; }
+    .history-item { flex-direction: column; align-items: stretch; }
+  }
+
+  @media(max-width: 600px) {
+    body { font-size: 14px; }
+    .topbar { padding: 0 0.75rem; }
+    .logo { font-size: 1.05rem; }
+    .nav-tab { padding: 7px 10px; font-size: 11px; }
+    .screen { padding: 1.25rem 0.85rem; }
+    .card { padding: 1rem; }
+    .page-title { font-size: 1.4rem; }
+    .home-title { font-size: 1.75rem; }
+    .home-sub { max-width: 100%; }
+    .home-card { padding: 1.1rem; }
+    .home-cards { grid-template-columns: 1fr; }
+    .btn { width: 100%; justify-content: center; }
+    .btn + .btn { margin-top: 0.75rem; }
+    .question-display { padding: 1rem; }
+    .option-item { padding: 10px 12px; font-size: 0.95rem; }
+    .history-info { width: 100%; }
+    .history-item { gap: 0.75rem; }
+    .history-meta { font-size: 11px; }
+    .modal-actions { flex-direction: column; align-items: stretch; }
+    .modal-actions button { width: 100%; }
+    .toast { left: 0.75rem; right: 0.75rem; }
+    .q-nav-dots { gap: 6px; }
+    .exam-topbar { padding: 0.75rem; }
+    .progress-wrap { margin-bottom: 1rem; }
+    .progress-label { gap: 0.5rem; flex-direction: column; align-items: flex-start; display: flex; }
+  }
+
+  @media(max-width: 414px) {
+    .nav-tabs { gap: 4px; }
+    .nav-tab { flex: 1 1 45%; }
+    .page-title { font-size: 1.3rem; }
+    .home-title { font-size: 1.5rem; }
+    .home-sub { font-size: 0.92rem; }
+    .q-text { font-size: 0.95rem; }
+    .opt-text { font-size: 0.92rem; }
+    .review-q-text { font-size: 0.82rem; }
+    .review-card-body { padding: 0.9rem 1rem; }
+    .history-score-badge { width: 40px; height: 40px; }
+    .history-meta { font-size: 10.5px; }
+    .exam-topbar { gap: 0.65rem; }
+    .btn { font-size: 0.95rem; }
   }
 </style>
 </head>
@@ -431,18 +527,18 @@
 
     <!-- Exam settings -->
     <div class="card" style="margin-bottom:1.25rem;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;flex-wrap:wrap;">
+      <div class="admin-settings-grid">
         <div>
           <label class="field-label">Tên đề thi</label>
           <input type="text" id="exam-name" placeholder="VD: Kiểm tra Toán 12" value="Đề thi trắc nghiệm">
         </div>
         <div>
           <label class="field-label">Thời gian (phút)</label>
-          <input type="text" id="exam-time" placeholder="60" value="30" style="width:100%">
+          <input type="text" id="exam-time" placeholder="60" value="30">
         </div>
         <div>
           <label class="field-label">Điểm đạt (%)</label>
-          <input type="text" id="exam-pass" placeholder="70" value="70" style="width:100%">
+          <input type="text" id="exam-pass" placeholder="70" value="70">
         </div>
       </div>
       <div style="margin-top:10px">
@@ -580,7 +676,6 @@
         <div class="page-sub">Các lần thi đã làm được lưu tại đây.</div>
       </div>
       <div class="spacer"></div>
-      <button class="btn btn-danger btn-sm" onclick="clearHistory()">🗑 Xóa lịch sử</button>
     </div>
     <div id="history-list"></div>
   </div>

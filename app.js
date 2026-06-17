@@ -15,6 +15,11 @@ let examStartTime = null;
 let isPracticeMode = false; // true for practice, false for exam
 let showCorrect = false; // for practice mode
 let selectedQuestionIndexes = [];
+let selectedHistoryIndex = null;
+let reviewFilter = 'all';
+let currentReviewDetails = [];
+let historyData = [];
+let historySource = 'local';
 
 // ── SCREEN MANAGEMENT ────────────────────────────────────────
 function showScreen(id) {
@@ -876,6 +881,8 @@ function renderResult(result) {
   const { total, correct, pct, passed, timeTaken, details, examName } = result;
   const wrong = total - correct;
   const tm = fmtTime(timeTaken);
+  reviewFilter = 'all';
+  currentReviewDetails = details;
 
   const el = document.getElementById('screen-result');
   el.innerHTML = `
@@ -918,14 +925,16 @@ function renderResult(result) {
       <button class="btn btn-primary" onclick="showScreen('history')">📊 Lịch sử</button>
     </div>
 
-    <div class="review-list">
-      ${details.map((d, i) => renderReviewCard(d, i)).join('')}
+    <div id="review-section">
+      ${renderReviewSection(details)}
     </div>
   `;
 }
 
 function renderReviewCard(d, i) {
-  const { q, userAnswers: ua, correctAnswers: ca, isCorrect } = d;
+  const ua = d.userAnswers instanceof Set ? d.userAnswers : new Set(d.userAnswers || []);
+  const ca = d.correctAnswers instanceof Set ? d.correctAnswers : new Set(d.correctAnswers || []);
+  const { q, isCorrect } = d;
   return `
     <div class="review-card">
       <div class="review-card-header" style="background:${isCorrect ? 'var(--green-lt)' : 'var(--red-lt)'}">
@@ -941,7 +950,7 @@ function renderReviewCard(d, i) {
           if (userChose && isRight)   { cls = 'correct'; icon = '✓ Bạn chọn — Đúng'; }
           else if (userChose && !isRight) { cls = 'wrong';   icon = '✗ Bạn chọn — Sai'; }
           else if (!userChose && isRight) { cls = 'missed';  icon = '← Đáp án đúng'; }
-          if (!cls) return '';
+          else { cls = 'review-option-row'; }
           return `<div class="review-option ${cls}">
             <strong>${'ABCDEF'[ai]}.</strong> ${escHtml(ans)}
             <span style="margin-left:auto;font-size:11px;opacity:.8">${icon}</span>
@@ -954,18 +963,44 @@ function renderReviewCard(d, i) {
 
 // ── HISTORY ───────────────────────────────────────────────────
 function saveToHistory(result) {
+  const historyItem = {
+    examName:        result.examName,
+    pct:             result.pct,
+    correct:         result.correct,
+    total:           result.total,
+    passed:          result.passed,
+    timeTaken:       result.timeTaken,
+    passPercent:     result.passPercent,
+    timeLimitMinutes: result.timeLimitMinutes || 30,
+    date:            result.date,
+    details:         result.details.map(d => ({
+      q: d.q,
+      userAnswers: Array.from(d.userAnswers),
+      correctAnswers: Array.from(d.correctAnswers),
+      isCorrect: d.isCorrect,
+    })),
+  };
+
   const history = getHistory();
-  history.unshift({
-    examName:   result.examName,
-    pct:        result.pct,
-    correct:    result.correct,
-    total:      result.total,
-    passed:     result.passed,
-    timeTaken:  result.timeTaken,
-    passPercent:result.passPercent,
-    date:       result.date,
-  });
+  history.unshift(historyItem);
   localStorage.setItem('examcraft_history', JSON.stringify(history.slice(0, 50)));
+  postHistoryToDB(historyItem);
+}
+
+function postHistoryToDB(historyItem) {
+  fetch('http://localhost:3000/history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(historyItem)
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) throw new Error(data.error);
+    toast('💾 Đã lưu lịch sử vào DB!', 'success');
+  })
+  .catch(err => {
+    console.warn('Không lưu lịch sử lên DB:', err);
+  });
 }
 
 function getHistory() {
@@ -973,35 +1008,225 @@ function getHistory() {
   catch { return []; }
 }
 
-function renderHistory() {
-  const history = getHistory();
+function fetchHistoryFromDB() {
+  return fetch('http://localhost:3000/history')
+    .then(res => {
+      if (!res.ok) throw new Error('Không thể tải lịch sử từ DB');
+      return res.json();
+    });
+}
+
+function setReviewFilter(filter) {
+  reviewFilter = filter;
+  const section = document.getElementById('review-section');
+  if (!section) return;
+  section.innerHTML = renderReviewSection(currentReviewDetails);
+}
+
+function showHistoryDetail(index) {
+  if (!historyData || historyData.length === 0) return;
+  selectedHistoryIndex = index;
+  reviewFilter = 'all';
+  renderHistoryList(historyData, historySource);
+}
+
+function renderReviewSection(details) {
+  const rows = Array.isArray(details) ? details : [];
+  const filtered = rows.filter(d => {
+    if (reviewFilter === 'correct') return d.isCorrect;
+    if (reviewFilter === 'wrong') return !d.isCorrect;
+    return true;
+  });
+
+  return `
+    <div class="review-filter-bar">
+      <button class="review-filter-btn ${reviewFilter === 'all' ? 'active' : ''}" onclick="setReviewFilter('all')">Tất cả</button>
+      <button class="review-filter-btn ${reviewFilter === 'correct' ? 'active' : ''}" onclick="setReviewFilter('correct')">Câu đúng</button>
+      <button class="review-filter-btn ${reviewFilter === 'wrong' ? 'active' : ''}" onclick="setReviewFilter('wrong')">Câu sai</button>
+    </div>
+    <div class="review-list">
+      ${filtered.length > 0 ? filtered.map((d, idx) => renderReviewCard(d, idx)).join('') : '<div class="empty-state"><div class="empty-icon">😕</div><p>Không có câu nào phù hợp với bộ lọc.</p></div>'}
+    </div>`;
+}
+
+function renderHistoryList(history, source) {
+  historyData = history;
+  historySource = source;
   const el = document.getElementById('history-list');
+  if (selectedHistoryIndex !== null && (selectedHistoryIndex < 0 || selectedHistoryIndex >= history.length)) {
+    selectedHistoryIndex = null;
+  }
   if (history.length === 0) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><p>Chưa có lịch sử thi nào.<br>Hãy làm bài thi đầu tiên!</p></div>`;
+    const message = source === 'db'
+      ? 'Chưa có lịch sử thi trong database.'
+      : 'Chưa có lịch sử thi. Hãy làm bài thi đầu tiên!';
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><p>${message}</p></div>`;
     return;
   }
-  el.innerHTML = history.map((h, i) => `
-    <div class="history-item">
-      <div class="history-score-badge ${h.passed ? 'pass' : 'fail'}">${h.pct}%</div>
+
+  const sourceNote = source === 'db'
+    ? '<div style="margin-bottom:1rem;font-size:13px;color:var(--ink-muted);">Đang hiển thị lịch sử lưu trên database.</div>'
+    : '<div style="margin-bottom:1rem;font-size:13px;color:var(--ink-muted);">Hiển thị lịch sử cục bộ vì chưa kết nối được DB.</div>';
+
+  const listHtml = history.map((h, i) => `
+    <div class="history-item ${selectedHistoryIndex === i ? 'selected-history' : ''}" onclick="showHistoryDetail(${i})">
+      <div>
+        <div class="history-score-badge ${h.passed ? 'pass' : 'fail'}">${h.pct}%</div>
+      </div>
       <div class="history-info">
         <div class="history-name">${escHtml(h.examName)}</div>
         <div class="history-meta">
           ${h.correct}/${h.total} câu đúng
+          · ${h.total - h.correct} câu sai
           · Thời gian: ${fmtTime(h.timeTaken)}
           · Điểm qua: ${h.passPercent}%
           · ${fmtDate(h.date)}
         </div>
       </div>
-      <div class="tag ${h.passed ? 'tag-single' : 'tag-multi'}">${h.passed ? '🎉 Đạt' : '❌ Trượt'}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="tag ${h.passed ? 'tag-single' : 'tag-multi'}">${h.passed ? '🎉 Đạt' : '❌ Trượt'}</div>
+        <button class="btn btn-danger btn-sm" onclick="deleteHistoryEntry(${i}, '${source}', event)">🗑</button>
+      </div>
     </div>
   `).join('');
+
+  if (selectedHistoryIndex !== null && history[selectedHistoryIndex]) {
+    currentReviewDetails = Array.isArray(history[selectedHistoryIndex].details)
+      ? history[selectedHistoryIndex].details
+      : [];
+  } else {
+    currentReviewDetails = [];
+  }
+
+  const selectedHistory = selectedHistoryIndex !== null ? history[selectedHistoryIndex] : null;
+  const wrongCount = selectedHistory ? (selectedHistory.total - selectedHistory.correct) : 0;
+
+  const detailHtml = selectedHistory
+    ? `
+      <div class="row" style="margin-top:1rem;margin-bottom:1rem;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="page-title" style="font-size:1.1rem;">🔎 Xem lại lần thi</div>
+          <div style="font-size:0.95rem;color:var(--ink-muted);">
+            ${selectedHistory.correct}/${selectedHistory.total} câu đúng · ${wrongCount} câu sai · Thời gian: ${fmtTime(selectedHistory.timeTaken)}
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn btn-secondary" onclick="restartWrongFromHistory(${selectedHistoryIndex})" ${wrongCount === 0 ? 'disabled' : ''}>🔁 Làm lại câu sai</button>
+      </div>
+      <div id="review-section">
+        ${renderReviewSection(currentReviewDetails)}
+      </div>
+    `
+    : `<div class="empty-state"><div class="empty-icon">👆</div><p>Nhấn vào một lần thi bên trên để xem chi tiết câu đúng/sai.</p></div>`;
+
+  el.innerHTML = sourceNote + listHtml + detailHtml;
+}
+
+function deleteHistoryEntry(index, source, event) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  if (!historyData || index < 0 || index >= historyData.length) return;
+
+  const confirmed = confirm('Xóa bản ghi này khỏi lịch sử?');
+  if (!confirmed) return;
+
+  if (source === 'db' && historyData[index].id) {
+    const id = historyData[index].id;
+    fetch(`http://localhost:3000/history/${id}`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        toast('✅ Đã xóa lịch sử DB!', 'success');
+        renderHistory();
+      })
+      .catch(err => {
+        console.warn('Không xóa được lịch sử DB:', err);
+        toast('❌ Xóa lịch sử DB thất bại.', 'error');
+      });
+    return;
+  }
+
+  const history = getHistory();
+  history.splice(index, 1);
+  localStorage.setItem('examcraft_history', JSON.stringify(history.slice(0, 50)));
+
+  if (selectedHistoryIndex === index) {
+    selectedHistoryIndex = null;
+  } else if (selectedHistoryIndex !== null && selectedHistoryIndex > index) {
+    selectedHistoryIndex -= 1;
+  }
+
+  renderHistory();
+}
+
+function restartWrongFromHistory(index) {
+  if (!historyData || historyData.length === 0 || index === null || index < 0 || index >= historyData.length) {
+    toast('⚠ Không tìm thấy lịch sử để làm lại.');
+    return;
+  }
+
+  const historyItem = historyData[index];
+  const wrongDetails = Array.isArray(historyItem.details)
+    ? historyItem.details.filter(d => !d.isCorrect)
+    : [];
+
+  if (wrongDetails.length === 0) {
+    toast('🎉 Không có câu sai để làm lại.');
+    return;
+  }
+
+  const wrongQuestions = wrongDetails.map(d => ({
+    text: d.q.text,
+    answers: Array.isArray(d.q.answers) ? [...d.q.answers] : [],
+    correct: Array.isArray(d.q.correct) ? [...d.q.correct] : [],
+    isMulti: Boolean(d.q.isMulti),
+  }));
+
+  currentExam = {
+    name: `${historyItem.examName} — Làm lại câu sai`,
+    desc: '',
+    timeLimitMinutes: historyItem.timeLimitMinutes || 30,
+    passPercent: historyItem.passPercent || 70,
+    questions: wrongQuestions,
+  };
+
+  userAnswers = {};
+  currentQIndex = 0;
+  isPracticeMode = false;
+  showCorrect = false;
+  examStartTime = Date.now();
+
+  renderExamScreen();
+  showScreen('exam');
+  clearInterval(timerInterval);
+  startTimer(currentExam.timeLimitMinutes || 30);
+}
+
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  el.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><p>Đang tải lịch sử...</p></div>`;
+
+  const localHistory = getHistory();
+  renderHistoryList(localHistory, 'local');
+
+  fetchHistoryFromDB()
+    .then(remoteHistory => renderHistoryList(remoteHistory, 'db'))
+    .catch(() => {
+      if (!localHistory || localHistory.length === 0) {
+        renderHistoryList([], 'local');
+      }
+    });
 }
 
 function clearHistory() {
   if (!confirm('Xoá toàn bộ lịch sử thi?')) return;
   localStorage.removeItem('examcraft_history');
+  selectedHistoryIndex = null;
+  fetch('http://localhost:3000/history', { method: 'DELETE' })
+    .then(res => res.json())
+    .then(() => toast('🗑 Đã xóa lịch sử DB!', 'success'))
+    .catch(() => console.warn('Không xóa được lịch sử DB'));
   renderHistory();
-  toast('🗑 Đã xoá lịch sử!');
+  toast('🗑 Đã xoá lịch sử cục bộ!');
 }
 
 // ── MODAL ─────────────────────────────────────────────────────
